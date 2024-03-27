@@ -36,7 +36,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
 });
 
-Route::post('register',[CommonController::class,'register']);
+Route::post('editProfile',[CommonController::class,'editProfile']);
 Route::post('register',[CommonController::class,'register']);
 Route::get('login',function(){
     return response()->json(['message'=>'unauthorized'],403);

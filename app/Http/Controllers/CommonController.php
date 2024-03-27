@@ -178,9 +178,9 @@ class CommonController extends Controller
    {
 
     $validator = validator::make($request->all(),[
-      'cloth_id'=>'required|integer|exists:cloths,id',
-      'quantity'=>'required|integer',
-      'total'=>'required|numeric',
+      'row.*.cloth_id'=>'required|integer|exists:cloths,id',
+      'row.*.quantity'=>'required|integer',
+      'row.*.total'=>'required|numeric',
     ]);
     if($validator->fails())
     {
@@ -188,8 +188,12 @@ class CommonController extends Controller
           'message'=>$validator->errors()->first()
       ],401);
     }
-   
-      Order::create(array_merge($validator->validated(),['user_id'=>auth()->user()->id]));
+
+      $orderKey=isset(Order::max('order_key')->order_key) ? Order::max('order_key')->order_key : 1;
+      foreach($validator->validated()['row'] as $row)
+      {
+       Order::create(array_merge($row,['user_id'=>auth()->user()->id,'order_key'=>$orderKey]));
+      }
       return response()->json(['message'=> 'Order placed'],200);
 
    }
@@ -199,7 +203,7 @@ class CommonController extends Controller
     if(auth()->user()->admin)
     {
       $validator = validator::make($request->all(),[
-        'id'=>'required|integer|exists:orders,id',
+        'order_key'=>'required|integer|exists:orders,order_key',
         'status'=>['required','max:50',Rule::in([1,2,3])]
       ]);
       if($validator->fails())
@@ -208,7 +212,7 @@ class CommonController extends Controller
             'message'=>$validator->errors()->first()
         ],401);
       }
-      Order::find($validator->validated()['id'])->update(['status'=>$validator->validated()['status']]);
+      Order::where('order_key',$validator->validated()['order_key'])->update(['status'=>$validator->validated()['status']]);
         return response()->json([
           'message'=>'Status updated!'
       ],200);
@@ -222,16 +226,25 @@ class CommonController extends Controller
    {
     if(auth()->user()->admin)
     {
-     $orders= Order::paginate(2); 
-     foreach ($orders as $order)
-     {
-      $order['item']=Order::find($order->id)->cloth->name;
-      $order['price']=Order::find($order->id)->cloth->price;
-      $order['customer']=Order::find($order->id)->user->name;
-      unset($order['user_id']);
-      unset($order['cloth_id']);
-     }
-     return $orders;
+      $orderKeys=[];
+       $orders= Order::paginate(2);
+      foreach($orders as $order)
+      {
+       if(in_array($order['order_key'],$orderKeys))
+       {
+        unset($orders[$order]);
+       } 
+        $orderKeys[]=$order['order_key'];
+        $order['total']=Order::where('order_key',$order->order_key)->get()->reduce(function($init,$order){return $init+$order->total;},0);
+        $order['items']=Order::where('order_key',$order->order_key)->get()->reduce(function($init,$order){return $init+$order->quantity;},0);
+        unset($order['user_id']);
+        unset($order['cloth_id']);
+        unset($order['created_at']);
+        unset($order['updated_at']);
+        unset($order['quantity']);
+  
+      }
+      return $orders;
     }
     return response()->json([
       'message'=>'Unautharized'
@@ -239,15 +252,30 @@ class CommonController extends Controller
    }
   public function userOrders()
   {
-    $orders = auth()->user()->orders;
+    $orderKeys=[];
+    $orders = auth()->user()->orders()->paginate(2);
     foreach($orders as $order)
     {
-      $order['item']=Order::find($order->id)->cloth->name;
-      $order['price']=Order::find($order->id)->cloth->price;
+     if(in_array($order['order_key'],$orderKeys))
+     {
+      unset($orders[$order]);
+     } 
+      $orderKeys[]=$order['order_key'];
+      $order['total']=Order::where('order_key',$order->order_key)->get()->reduce(function($init,$order){return $init+$order->total;},0);
+      $order['items']=Order::where('order_key',$order->order_key)->get()->reduce(function($init,$order){return $init+$order->quantity;},0);
       unset($order['user_id']);
       unset($order['cloth_id']);
+      unset($order['created_at']);
+      unset($order['updated_at']);
+      unset($order['quantity']);
+
     }
     return $orders;
+  }
+
+  public function singleOrder(int $orderKey)
+  {
+   return Order::where('order_key',$orderKey)->paginate(2);
   }
 
   }

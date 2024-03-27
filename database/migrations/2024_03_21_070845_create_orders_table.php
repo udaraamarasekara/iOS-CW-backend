@@ -19,6 +19,7 @@ return new class extends Migration
             $table->decimal('total');
             $table->enum('status',['placed','shipped','completed']);
             $table->foreignId('user_id')->constrained();
+            $table->integer('order_key');
         });
     }
 
